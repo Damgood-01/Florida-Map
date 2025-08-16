@@ -41,6 +41,14 @@
   .toggle-btn:hover {
     background: #005a9e;
   }
+  .spring-label {
+    background-color: rgba(255,255,255,0.8);
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 12px;
+    font-weight: bold;
+  }
 </style>
 </head>
 <body>
@@ -104,7 +112,7 @@ map.addLayer(markerCluster);
 function createMarker(feature) {
   const mag = feature.properties.MAGNITUDE || 'Unknown';
   const color = magnitudeColors[mag] || 'black';
-  return L.circleMarker(
+  const marker = L.circleMarker(
     [feature.geometry.coordinates[1], feature.geometry.coordinates[0]],
     { radius: 6, fillColor: color, color: '#000', weight: 1, opacity: 1, fillOpacity: 0.8 }
   ).bindPopup(
@@ -112,6 +120,14 @@ function createMarker(feature) {
      County: ${feature.properties.COUNTY || '—'}<br>
      Magnitude: ${mag}`
   );
+
+  // Show spring names permanently if fewer than 5 markers visible
+  const visibleMarkers = Object.values(allMarkers).flat().filter(m => map.hasLayer(m));
+  if (visibleMarkers.length < 5) {
+    marker.bindTooltip(feature.properties.SPRING_NAME || 'Unnamed', {permanent: true, direction: 'top', className: 'spring-label'});
+  }
+
+  return marker;
 }
 
 function updateMarkers() {
@@ -122,6 +138,17 @@ function updateMarkers() {
       markerCluster.addLayers(allMarkers[mag]);
     }
   }
+
+  // Update permanent labels after filtering
+  Object.values(allMarkers).flat().forEach(marker => {
+    if (map.hasLayer(marker)) {
+      marker.unbindTooltip();
+      const visibleMarkers = Object.values(allMarkers).flat().filter(m => map.hasLayer(m));
+      if (visibleMarkers.length < 5) {
+        marker.bindTooltip(marker.getPopup().getContent().match(/<b>(.*?)<\/b>/)[1], {permanent: true, direction: 'top', className: 'spring-label'});
+      }
+    }
+  });
 }
 
 function createFilterCheckboxes() {
@@ -143,7 +170,6 @@ function createFilterCheckboxes() {
     filterBox.appendChild(document.createElement('br'));
   }
 
-  // Unknown magnitude checkbox
   const cbUnknown = document.createElement('input');
   cbUnknown.type = 'checkbox';
   cbUnknown.className = 'filter-checkbox';
@@ -178,6 +204,25 @@ fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServe
     });
     updateMarkers();
   });
+
+// Click to get address
+map.on('click', function(e) {
+    const latlng = e.latlng;
+    L.Control.Geocoder.nominatim().reverse(latlng, map.options.crs.scale(map.getZoom()), function(results) {
+        let r = results && results[0];
+        if (r) {
+            L.popup()
+             .setLatLng(latlng)
+             .setContent(`<b>Address:</b> ${r.name}`)
+             .openOn(map);
+        } else {
+            L.popup()
+             .setLatLng(latlng)
+             .setContent("Address not found")
+             .openOn(map);
+        }
+    });
+});
 </script>
 </body>
 </html>
