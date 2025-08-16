@@ -46,7 +46,7 @@
 <body>
 <div id="map"></div>
 <div class="filter-container">
-  <button class="toggle-btn" onclick="toggleFilter()">☰ Filters</button>
+  <button class="toggle-btn" onclick="toggleFilter()">☰ Magnitudes</button>
   <div class="filter-box" id="filterBox">
     <strong>Filter by Magnitude:</strong><br>
   </div>
@@ -59,29 +59,72 @@
 const map = L.map('map').setView([28.3, -82.0], 6);
 
 // Base layers
-const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
-const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri & contributors' });
-const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Map data ©2025 Google', maxZoom: 20 });
+const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors'
+}).addTo(map);
 
-// Layer control
-L.control.layers({ "Street Map": streetLayer, "Satellite": satelliteLayer, "Hybrid": googleHybrid }).addTo(map);
+const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles © Esri & contributors'
+});
 
-// Search
-L.Control.geocoder({ defaultMarkGeocode: true, placeholder: "Search address..." }).addTo(map);
+// Google-style Hybrid (Satellite + Labels)
+const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+  subdomains:['mt0','mt1','mt2','mt3'],
+  attribution: 'Map data ©2025 Google',
+  maxZoom: 20
+});
 
-// Marker cluster
+// Add layer control
+L.control.layers(
+  { "Street Map": streetLayer, "Satellite": satelliteLayer, "Hybrid": googleHybrid },
+  {}
+).addTo(map);
+
+// Add search control
+L.Control.geocoder({
+  defaultMarkGeocode: true,
+  placeholder: "Search address..."
+}).addTo(map);
+
+const magnitudeColors = {
+  '1': 'red',
+  '2': 'orange',
+  '3': 'gold',
+  '4': 'green',
+  '5': 'blue',
+  '6': 'purple',
+  '7': 'pink',
+  '8': 'gray'
+};
+
 let allMarkers = {};
 let markerCluster = L.markerClusterGroup();
 map.addLayer(markerCluster);
 
-// Toggle filter box
-function toggleFilter() {
-  const box = document.getElementById('filterBox');
-  box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
+function createMarker(feature) {
+  const mag = feature.properties.MAGNITUDE || 'Unknown';
+  const color = magnitudeColors[mag] || 'black';
+  return L.circleMarker(
+    [feature.geometry.coordinates[1], feature.geometry.coordinates[0]],
+    { radius: 6, fillColor: color, color: '#000', weight: 1, opacity: 1, fillOpacity: 0.8 }
+  ).bindPopup(
+    `<b>${feature.properties.SPRING_NAME || 'Unnamed'}</b><br>
+     County: ${feature.properties.COUNTY || '—'}<br>
+     Magnitude: ${mag}`
+  );
 }
 
-// Magnitude checkboxes
-function createMagnitudeCheckboxes() {
+function updateMarkers() {
+  markerCluster.clearLayers();
+  const checkedMagnitudes = Array.from(document.querySelectorAll('.filter-checkbox:checked')).map(cb => cb.value);
+  for (let mag in allMarkers) {
+    if (checkedMagnitudes.includes(mag)) {
+      markerCluster.addLayers(allMarkers[mag]);
+    }
+  }
+}
+
+function createFilterCheckboxes() {
   const filterBox = document.getElementById('filterBox');
   for (let mag = 1; mag <= 8; mag++) {
     const cb = document.createElement('input');
@@ -92,6 +135,7 @@ function createMagnitudeCheckboxes() {
     cb.onchange = updateMarkers;
 
     const label = document.createElement('label');
+    label.style.color = magnitudeColors[mag];
     label.style.marginLeft = "4px";
     label.appendChild(cb);
     label.appendChild(document.createTextNode(' Magnitude ' + mag));
@@ -100,42 +144,16 @@ function createMagnitudeCheckboxes() {
   }
 }
 
-// Update markers based on magnitude
-function updateMarkers() {
-  markerCluster.clearLayers();
-  const checkedMagnitudes = Array.from(document.querySelectorAll('.filter-checkbox:checked')).map(cb => cb.value);
-
-  for (let mag in allMarkers) {
-    if (checkedMagnitudes.includes(mag)) {
-      allMarkers[mag].forEach(marker => {
-        markerCluster.addLayer(marker);
-      });
-    }
-  }
+function toggleFilter() {
+  const box = document.getElementById('filterBox');
+  box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
 }
 
-// Create marker
-function createMarker(feature) {
-  const mag = feature.properties.MAGNITUDE || 'Unknown';
-  const marker = L.circleMarker(
-    [feature.geometry.coordinates[1], feature.geometry.coordinates[0]],
-    { radius: 6, fillColor: 'orange', color: '#000', weight: 1, opacity: 1, fillOpacity: 0.8 }
-  ).bindPopup(
-    `<b>${feature.properties.SPRING_NAME || 'Unnamed'}</b><br>
-     County: ${feature.properties.COUNTY || '—'}<br>
-     Magnitude: ${mag}`
-  );
-  marker.feature = feature;
-  return marker;
-}
-
-// Initialize magnitude checkboxes
-createMagnitudeCheckboxes();
-
-// Fetch DEP springs data
+// Fetch springs data
 fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServer/1/query?where=1%3D1&outFields=SPRING_NAME,COUNTY,MAGNITUDE&f=geojson')
   .then(r => r.json())
   .then(data => {
+    createFilterCheckboxes();
     data.features.forEach(feature => {
       const mag = feature.properties.MAGNITUDE || 'Unknown';
       const marker = createMarker(feature);
