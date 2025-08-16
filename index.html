@@ -121,7 +121,6 @@ function createMarker(feature) {
      Magnitude: ${mag}`
   );
 
-  // Show spring names permanently if fewer than 5 markers visible
   const visibleMarkers = Object.values(allMarkers).flat().filter(m => map.hasLayer(m));
   if (visibleMarkers.length < 5) {
     marker.bindTooltip(feature.properties.SPRING_NAME || 'Unnamed', {permanent: true, direction: 'top', className: 'spring-label'});
@@ -139,7 +138,6 @@ function updateMarkers() {
     }
   }
 
-  // Update permanent labels after filtering
   Object.values(allMarkers).flat().forEach(marker => {
     if (map.hasLayer(marker)) {
       marker.unbindTooltip();
@@ -205,23 +203,26 @@ fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServe
     updateMarkers();
   });
 
-// Click to get address
+// Leaflet click with Nominatim reverse geocoding
 map.on('click', function(e) {
-    const latlng = e.latlng;
-    L.Control.Geocoder.nominatim().reverse(latlng, map.options.crs.scale(map.getZoom()), function(results) {
-        let r = results && results[0];
-        if (r) {
-            L.popup()
-             .setLatLng(latlng)
-             .setContent(`<b>Address:</b> ${r.name}`)
-             .openOn(map);
-        } else {
-            L.popup()
-             .setLatLng(latlng)
-             .setContent("Address not found")
-             .openOn(map);
-        }
-    });
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`)
+      .then(res => res.json())
+      .then(data => {
+          const address = data.display_name || "No nearby address";
+          L.popup()
+            .setLatLng(e.latlng)
+            .setContent(`<b>Nearest Address:</b> ${address}`)
+            .openOn(map);
+      })
+      .catch(() => {
+          L.popup()
+            .setLatLng(e.latlng)
+            .setContent("No address found")
+            .openOn(map);
+      });
 });
 </script>
 </body>
