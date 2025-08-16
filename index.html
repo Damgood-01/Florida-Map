@@ -50,12 +50,6 @@
   <div class="filter-box" id="filterBox">
     <strong>Filter by Magnitude:</strong><br>
   </div>
-  <div class="filter-box" id="publicFilterBox">
-    <strong>Filter by Public Access:</strong><br>
-    <input type="checkbox" id="publicYes" checked> Public<br>
-    <input type="checkbox" id="publicNo" checked> Private/Restricted<br>
-    <input type="checkbox" id="publicUnknown" checked> Unknown<br>
-  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -83,10 +77,7 @@ map.addLayer(markerCluster);
 // Toggle filter box
 function toggleFilter() {
   const box = document.getElementById('filterBox');
-  const pubBox = document.getElementById('publicFilterBox');
-  const display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
-  box.style.display = display;
-  pubBox.style.display = display;
+  box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
 }
 
 // Magnitude checkboxes
@@ -109,55 +100,30 @@ function createMagnitudeCheckboxes() {
   }
 }
 
-// Update markers by magnitude and public access
+// Update markers by magnitude
 function updateMarkers() {
   markerCluster.clearLayers();
   const checkedMagnitudes = Array.from(document.querySelectorAll('.filter-checkbox:checked')).map(cb => cb.value);
-  const showPublic = document.getElementById('publicYes').checked;
-  const showPrivate = document.getElementById('publicNo').checked;
-  const showUnknown = document.getElementById('publicUnknown').checked;
 
   for (let mag in allMarkers) {
     if (checkedMagnitudes.includes(mag)) {
       allMarkers[mag].forEach(marker => {
-        const access = marker.feature?.properties.PUBLIC_ACCESS;
-        let status;
-        if (access === true) status = 'public';
-        else if (access === false) status = 'private';
-        else status = 'unknown';
-
-        if ((status === 'public' && showPublic) || 
-            (status === 'private' && showPrivate) || 
-            (status === 'unknown' && showUnknown)) {
-          markerCluster.addLayer(marker);
-        }
+        markerCluster.addLayer(marker);
       });
     }
   }
 }
 
-// Public access events
-document.getElementById('publicYes').onchange = updateMarkers;
-document.getElementById('publicNo').onchange = updateMarkers;
-document.getElementById('publicUnknown').onchange = updateMarkers;
-
-// Create marker, color by access status
+// Create marker
 function createMarker(feature) {
   const mag = feature.properties.MAGNITUDE || 'Unknown';
-  const access = feature.properties.PUBLIC_ACCESS;
-  let color;
-  if (access === true) color = 'cyan';
-  else if (access === false) color = 'magenta';
-  else color = 'gray';
-
   const marker = L.circleMarker(
     [feature.geometry.coordinates[1], feature.geometry.coordinates[0]],
-    { radius: 6, fillColor: color, color: '#000', weight: 1, opacity: 1, fillOpacity: 0.8 }
+    { radius: 6, fillColor: 'orange', color: '#000', weight: 1, opacity: 1, fillOpacity: 0.8 }
   ).bindPopup(
     `<b>${feature.properties.SPRING_NAME || 'Unnamed'}</b><br>
      County: ${feature.properties.COUNTY || '—'}<br>
-     Magnitude: ${mag}<br>
-     Access: ${access === true ? 'Public' : access === false ? 'Private/Restricted' : 'Unknown'}`
+     Magnitude: ${mag}`
   );
   marker.feature = feature;
   return marker;
@@ -167,7 +133,7 @@ function createMarker(feature) {
 createMagnitudeCheckboxes();
 
 // Fetch DEP springs data
-fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServer/1/query?where=1%3D1&outFields=SPRING_NAME,COUNTY,MAGNITUDE,PUBLIC_ACCESS&f=geojson')
+fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServer/1/query?where=1%3D1&outFields=SPRING_NAME,COUNTY,MAGNITUDE&f=geojson')
   .then(r => r.json())
   .then(data => {
     data.features.forEach(feature => {
