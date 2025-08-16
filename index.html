@@ -54,6 +54,7 @@
     <strong>Filter by Public Access:</strong><br>
     <input type="checkbox" id="publicYes" checked> Public<br>
     <input type="checkbox" id="publicNo" checked> Private/Restricted<br>
+    <input type="checkbox" id="publicUnknown" checked> Unknown<br>
   </div>
 </div>
 
@@ -65,7 +66,7 @@ const map = L.map('map').setView([28.3, -82.0], 6);
 
 // Base layers
 const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
-const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri & contributors' });
+const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri & contributors' });
 const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Map data ©2025 Google', maxZoom: 20 });
 
 // Layer control
@@ -114,12 +115,20 @@ function updateMarkers() {
   const checkedMagnitudes = Array.from(document.querySelectorAll('.filter-checkbox:checked')).map(cb => cb.value);
   const showPublic = document.getElementById('publicYes').checked;
   const showPrivate = document.getElementById('publicNo').checked;
+  const showUnknown = document.getElementById('publicUnknown').checked;
 
   for (let mag in allMarkers) {
     if (checkedMagnitudes.includes(mag)) {
       allMarkers[mag].forEach(marker => {
-        const isPublic = marker.feature?.properties.PUBLIC_ACCESS !== undefined ? marker.feature.properties.PUBLIC_ACCESS : true; 
-        if ((isPublic && showPublic) || (!isPublic && showPrivate)) {
+        const access = marker.feature?.properties.PUBLIC_ACCESS;
+        let status;
+        if (access === true) status = 'public';
+        else if (access === false) status = 'private';
+        else status = 'unknown';
+
+        if ((status === 'public' && showPublic) || 
+            (status === 'private' && showPrivate) || 
+            (status === 'unknown' && showUnknown)) {
           markerCluster.addLayer(marker);
         }
       });
@@ -130,35 +139,31 @@ function updateMarkers() {
 // Public access events
 document.getElementById('publicYes').onchange = updateMarkers;
 document.getElementById('publicNo').onchange = updateMarkers;
+document.getElementById('publicUnknown').onchange = updateMarkers;
 
-// Create marker, color by public access
+// Create marker, color by access status
 function createMarker(feature) {
   const mag = feature.properties.MAGNITUDE || 'Unknown';
-  const isPublic = feature.properties.PUBLIC_ACCESS !== undefined ? feature.properties.PUBLIC_ACCESS : true;
-  const color = isPublic ? 'cyan' : 'magenta';
+  const access = feature.properties.PUBLIC_ACCESS;
+  let color;
+  if (access === true) color = 'cyan';
+  else if (access === false) color = 'magenta';
+  else color = 'gray';
 
   const marker = L.circleMarker(
     [feature.geometry.coordinates[1], feature.geometry.coordinates[0]],
-    { radius: 6, fillColor: color, color: '#000', weight: 1, opacity: 1, fillOpacity: 0.9 }
+    { radius: 6, fillColor: color, color: '#000', weight: 1, opacity: 1, fillOpacity: 0.8 }
   ).bindPopup(
     `<b>${feature.properties.SPRING_NAME || 'Unnamed'}</b><br>
      County: ${feature.properties.COUNTY || '—'}<br>
      Magnitude: ${mag}<br>
-     Public Access: ${isPublic ? 'Yes' : 'No'}`
+     Access: ${access === true ? 'Public' : access === false ? 'Private/Restricted' : 'Unknown'}`
   );
-
-  // Ensure feature is attached
-  marker.feature = {
-    properties: {
-      MAGNITUDE: mag,
-      PUBLIC_ACCESS: isPublic
-    }
-  };
-
+  marker.feature = feature;
   return marker;
 }
 
-// Initialize checkboxes
+// Initialize magnitude checkboxes
 createMagnitudeCheckboxes();
 
 // Fetch DEP springs data
@@ -171,16 +176,6 @@ fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServe
       if (!allMarkers[mag]) allMarkers[mag] = [];
       allMarkers[mag].push(marker);
     });
-
-    // Add Juniper Springs manually
-    const juniperFeature = {
-      geometry: { type: "Point", coordinates: [-81.7120, 29.1839] },
-      properties: { SPRING_NAME: "Juniper Springs", COUNTY: "Marion", MAGNITUDE: 2, PUBLIC_ACCESS: true }
-    };
-    const juniperMarker = createMarker(juniperFeature);
-    if (!allMarkers[2]) allMarkers[2] = [];
-    allMarkers[2].push(juniperMarker);
-
     updateMarkers();
   });
 </script>
