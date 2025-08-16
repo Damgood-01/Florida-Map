@@ -46,9 +46,14 @@
 <body>
 <div id="map"></div>
 <div class="filter-container">
-  <button class="toggle-btn" onclick="toggleFilter()">☰ Magnitudes</button>
+  <button class="toggle-btn" onclick="toggleFilter()">☰ Filters</button>
   <div class="filter-box" id="filterBox">
     <strong>Filter by Magnitude:</strong><br>
+  </div>
+  <div class="filter-box" id="publicFilterBox">
+    <strong>Filter by Public Access:</strong><br>
+    <input type="checkbox" id="publicYes" checked> Public<br>
+    <input type="checkbox" id="publicNo" checked> Private/Restricted<br>
   </div>
 </div>
 
@@ -59,72 +64,32 @@
 const map = L.map('map').setView([28.3, -82.0], 6);
 
 // Base layers
-const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap contributors'
-}).addTo(map);
+const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
+const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri & contributors' });
+const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Map data ©2025 Google', maxZoom: 20 });
 
-const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  attribution: 'Tiles © Esri & contributors'
-});
+// Layer control
+L.control.layers({ "Street Map": streetLayer, "Satellite": satelliteLayer, "Hybrid": googleHybrid }).addTo(map);
 
-// Google-style Hybrid (Satellite + Labels)
-const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-  subdomains:['mt0','mt1','mt2','mt3'],
-  attribution: 'Map data ©2025 Google',
-  maxZoom: 20
-});
+// Search
+L.Control.geocoder({ defaultMarkGeocode: true, placeholder: "Search address..." }).addTo(map);
 
-// Add layer control
-L.control.layers(
-  { "Street Map": streetLayer, "Satellite": satelliteLayer, "Hybrid": googleHybrid },
-  {}
-).addTo(map);
-
-// Add search control
-L.Control.geocoder({
-  defaultMarkGeocode: true,
-  placeholder: "Search address..."
-}).addTo(map);
-
-const magnitudeColors = {
-  '1': 'red',
-  '2': 'orange',
-  '3': 'gold',
-  '4': 'green',
-  '5': 'blue',
-  '6': 'purple',
-  '7': 'pink',
-  '8': 'gray'
-};
-
+// Marker cluster
 let allMarkers = {};
 let markerCluster = L.markerClusterGroup();
 map.addLayer(markerCluster);
 
-function createMarker(feature) {
-  const mag = feature.properties.MAGNITUDE || 'Unknown';
-  const color = magnitudeColors[mag] || 'black';
-  return L.circleMarker(
-    [feature.geometry.coordinates[1], feature.geometry.coordinates[0]],
-    { radius: 6, fillColor: color, color: '#000', weight: 1, opacity: 1, fillOpacity: 0.8 }
-  ).bindPopup(
-    `<b>${feature.properties.SPRING_NAME || 'Unnamed'}</b><br>
-     County: ${feature.properties.COUNTY || '—'}<br>
-     Magnitude: ${mag}`
-  );
+// Toggle filter box
+function toggleFilter() {
+  const box = document.getElementById('filterBox');
+  const pubBox = document.getElementById('publicFilterBox');
+  const display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
+  box.style.display = display;
+  pubBox.style.display = display;
 }
 
-function updateMarkers() {
-  markerCluster.clearLayers();
-  const checkedMagnitudes = Array.from(document.querySelectorAll('.filter-checkbox:checked')).map(cb => cb.value);
-  for (let mag in allMarkers) {
-    if (checkedMagnitudes.includes(mag)) {
-      markerCluster.addLayers(allMarkers[mag]);
-    }
-  }
-}
-
-function createFilterCheckboxes() {
+// Magnitude checkboxes
+function createMagnitudeCheckboxes() {
   const filterBox = document.getElementById('filterBox');
   for (let mag = 1; mag <= 8; mag++) {
     const cb = document.createElement('input');
@@ -135,7 +100,6 @@ function createFilterCheckboxes() {
     cb.onchange = updateMarkers;
 
     const label = document.createElement('label');
-    label.style.color = magnitudeColors[mag];
     label.style.marginLeft = "4px";
     label.appendChild(cb);
     label.appendChild(document.createTextNode(' Magnitude ' + mag));
@@ -144,22 +108,71 @@ function createFilterCheckboxes() {
   }
 }
 
-function toggleFilter() {
-  const box = document.getElementById('filterBox');
-  box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
+// Update markers by magnitude and public access
+function updateMarkers() {
+  markerCluster.clearLayers();
+  const checkedMagnitudes = Array.from(document.querySelectorAll('.filter-checkbox:checked')).map(cb => cb.value);
+  const showPublic = document.getElementById('publicYes').checked;
+  const showPrivate = document.getElementById('publicNo').checked;
+
+  for (let mag in allMarkers) {
+    if (checkedMagnitudes.includes(mag)) {
+      allMarkers[mag].forEach(marker => {
+        const isPublic = marker.feature?.properties.PUBLIC_ACCESS ?? true; 
+        if ((isPublic && showPublic) || (!isPublic && showPrivate)) {
+          markerCluster.addLayer(marker);
+        }
+      });
+    }
+  }
 }
 
-// Fetch springs data
-fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServer/1/query?where=1%3D1&outFields=SPRING_NAME,COUNTY,MAGNITUDE&f=geojson')
+// Public access events
+document.getElementById('publicYes').onchange = updateMarkers;
+document.getElementById('publicNo').onchange = updateMarkers;
+
+// Create marker, color by public access
+function createMarker(feature) {
+  const mag = feature.properties.MAGNITUDE || 'Unknown';
+  const isPublic = feature.properties.PUBLIC_ACCESS ?? true;
+  const color = isPublic ? 'cyan' : 'magenta';
+
+  const marker = L.circleMarker(
+    [feature.geometry.coordinates[1], feature.geometry.coordinates[0]],
+    { radius: 6, fillColor: color, color: '#000', weight: 1, opacity: 1, fillOpacity: 0.9 }
+  ).bindPopup(
+    `<b>${feature.properties.SPRING_NAME || 'Unnamed'}</b><br>
+     County: ${feature.properties.COUNTY || '—'}<br>
+     Magnitude: ${mag}<br>
+     Public Access: ${isPublic ? 'Yes' : 'No'}`
+  );
+  marker.feature = feature;
+  return marker;
+}
+
+// Initialize checkboxes
+createMagnitudeCheckboxes();
+
+// Fetch DEP springs data
+fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServer/1/query?where=1%3D1&outFields=SPRING_NAME,COUNTY,MAGNITUDE,PUBLIC_ACCESS&f=geojson')
   .then(r => r.json())
   .then(data => {
-    createFilterCheckboxes();
     data.features.forEach(feature => {
       const mag = feature.properties.MAGNITUDE || 'Unknown';
       const marker = createMarker(feature);
       if (!allMarkers[mag]) allMarkers[mag] = [];
       allMarkers[mag].push(marker);
     });
+
+    // Add Juniper Springs manually
+    const juniperFeature = {
+      geometry: { type: "Point", coordinates: [-81.7120, 29.1839] },
+      properties: { SPRING_NAME: "Juniper Springs", COUNTY: "Marion", MAGNITUDE: 2, PUBLIC_ACCESS: true }
+    };
+    const juniperMarker = createMarker(juniperFeature);
+    if (!allMarkers[2]) allMarkers[2] = [];
+    allMarkers[2].push(juniperMarker);
+
     updateMarkers();
   });
 </script>
