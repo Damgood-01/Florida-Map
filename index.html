@@ -24,7 +24,7 @@
     border-radius: 6px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.3);
     margin-top: 5px;
-    display: none; /* hidden by default */
+    display: none;
     max-height: 70vh;
     overflow-y: auto;
   }
@@ -57,9 +57,28 @@
 <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 <script>
 const map = L.map('map').setView([28.3, -82.0], 6);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+// Base layers
+const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
+
+const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles © Esri & contributors'
+});
+
+// Google-style Hybrid (Satellite + Labels)
+const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+  subdomains:['mt0','mt1','mt2','mt3'],
+  attribution: 'Map data ©2025 Google',
+  maxZoom: 20
+});
+
+// Add layer control
+L.control.layers(
+  { "Street Map": streetLayer, "Satellite": satelliteLayer, "Hybrid": googleHybrid },
+  {}
+).addTo(map);
 
 // Add search control
 L.Control.geocoder({
@@ -130,6 +149,7 @@ function toggleFilter() {
   box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
 }
 
+// Fetch springs data
 fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServer/1/query?where=1%3D1&outFields=SPRING_NAME,COUNTY,MAGNITUDE&f=geojson')
   .then(r => r.json())
   .then(data => {
