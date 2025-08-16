@@ -100,7 +100,7 @@ function createMagnitudeCheckboxes() {
   }
 }
 
-// Update markers by magnitude
+// Update markers based on magnitude
 function updateMarkers() {
   markerCluster.clearLayers();
   const checkedMagnitudes = Array.from(document.querySelectorAll('.filter-checkbox:checked')).map(cb => cb.value);
