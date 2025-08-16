@@ -67,20 +67,19 @@ const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/
   attribution: 'Tiles © Esri & contributors'
 });
 
-// Google-style Hybrid (Satellite + Labels)
 const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
   subdomains:['mt0','mt1','mt2','mt3'],
   attribution: 'Map data ©2025 Google',
   maxZoom: 20
 });
 
-// Add layer control
+// Layer control
 L.control.layers(
   { "Street Map": streetLayer, "Satellite": satelliteLayer, "Hybrid": googleHybrid },
   {}
 ).addTo(map);
 
-// Add search control
+// Address search
 L.Control.geocoder({
   defaultMarkGeocode: true,
   placeholder: "Search address..."
@@ -94,7 +93,8 @@ const magnitudeColors = {
   '5': 'blue',
   '6': 'purple',
   '7': 'pink',
-  '8': 'gray'
+  '8': 'gray',
+  'Unknown': 'black'
 };
 
 let allMarkers = {};
@@ -142,6 +142,22 @@ function createFilterCheckboxes() {
     filterBox.appendChild(label);
     filterBox.appendChild(document.createElement('br'));
   }
+
+  // Unknown magnitude checkbox
+  const cbUnknown = document.createElement('input');
+  cbUnknown.type = 'checkbox';
+  cbUnknown.className = 'filter-checkbox';
+  cbUnknown.value = 'Unknown';
+  cbUnknown.checked = true;
+  cbUnknown.onchange = updateMarkers;
+
+  const labelUnknown = document.createElement('label');
+  labelUnknown.style.color = magnitudeColors['Unknown'];
+  labelUnknown.style.marginLeft = "4px";
+  labelUnknown.appendChild(cbUnknown);
+  labelUnknown.appendChild(document.createTextNode(' Unknown'));
+  filterBox.appendChild(labelUnknown);
+  filterBox.appendChild(document.createElement('br'));
 }
 
 function toggleFilter() {
@@ -149,7 +165,7 @@ function toggleFilter() {
   box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
 }
 
-// Fetch springs data
+// Load DEP springs data
 fetch('https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/SPRINGS/MapServer/1/query?where=1%3D1&outFields=SPRING_NAME,COUNTY,MAGNITUDE&f=geojson')
   .then(r => r.json())
   .then(data => {
