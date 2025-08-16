@@ -118,7 +118,7 @@ function updateMarkers() {
   for (let mag in allMarkers) {
     if (checkedMagnitudes.includes(mag)) {
       allMarkers[mag].forEach(marker => {
-        const isPublic = marker.feature?.properties.PUBLIC_ACCESS ?? true; 
+        const isPublic = marker.feature?.properties.PUBLIC_ACCESS !== undefined ? marker.feature.properties.PUBLIC_ACCESS : true; 
         if ((isPublic && showPublic) || (!isPublic && showPrivate)) {
           markerCluster.addLayer(marker);
         }
@@ -134,7 +134,7 @@ document.getElementById('publicNo').onchange = updateMarkers;
 // Create marker, color by public access
 function createMarker(feature) {
   const mag = feature.properties.MAGNITUDE || 'Unknown';
-  const isPublic = feature.properties.PUBLIC_ACCESS ?? true;
+  const isPublic = feature.properties.PUBLIC_ACCESS !== undefined ? feature.properties.PUBLIC_ACCESS : true;
   const color = isPublic ? 'cyan' : 'magenta';
 
   const marker = L.circleMarker(
@@ -146,7 +146,15 @@ function createMarker(feature) {
      Magnitude: ${mag}<br>
      Public Access: ${isPublic ? 'Yes' : 'No'}`
   );
-  marker.feature = feature;
+
+  // Ensure feature is attached
+  marker.feature = {
+    properties: {
+      MAGNITUDE: mag,
+      PUBLIC_ACCESS: isPublic
+    }
+  };
+
   return marker;
 }
 
